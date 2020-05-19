@@ -47,6 +47,7 @@ import Select from '@material-ui/core/Select';
 import FormControl from '@material-ui/core/FormControl';
 import InputLabel from '@material-ui/core/InputLabel';
 import MenuItem from '@material-ui/core/MenuItem';
+import axios from 'axios';
 
 interface PipelineDetailsState {
   graph: dagre.graphlib.Graph | null;
@@ -370,137 +371,35 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
 
   public async load(): Promise<void> {
     this.clearBanner();
-    const fromRunId = new URLParser(this.props).get(QUERY_PARAMS.fromRunId);
+    const pipelineIdFromParams = this.props.match.params[RouteParams.pipelineId];
+    const apiUrl = 'http://127.0.0.1:5000/pipeline_details?pipeline=' + pipelineIdFromParams;
+    console.log("from run id");
+    console.log(pipelineIdFromParams);
 
     let pipeline: ApiPipeline | null = null;
     let version: ApiPipelineVersion | null = null;
     let templateString = '';
     let breadcrumbs: Array<{ displayName: string; href: string }> = [];
     const toolbarActions = this.props.toolbarProps.actions;
-    let pageTitle = '';
+    let pageTitle = pipelineIdFromParams;
     let selectedVersion: ApiPipelineVersion | undefined;
     let versions: ApiPipelineVersion[] = [];
 
-    // If fromRunId is specified, load the run and get the pipeline template from it
-    if (fromRunId) {
-      try {
-        const runDetails = await Apis.runServiceApi.getRun(fromRunId);
-
-        // Convert the run's pipeline spec to YAML to be displayed as the pipeline's source.
-        try {
-          const pipelineSpec = JSON.parse(RunUtils.getWorkflowManifest(runDetails.run) || '{}');
-          try {
-            templateString = JsYaml.safeDump(pipelineSpec);
-          } catch (err) {
-            await this.showPageError(
-              `Failed to parse pipeline spec from run with ID: ${runDetails.run!.id}.`,
-              err,
-            );
-            logger.error(
-              `Failed to convert pipeline spec YAML from run with ID: ${runDetails.run!.id}.`,
-              err,
-            );
-          }
-        } catch (err) {
-          await this.showPageError(
-            `Failed to parse pipeline spec from run with ID: ${runDetails.run!.id}.`,
-            err,
-          );
-          logger.error(
-            `Failed to parse pipeline spec JSON from run with ID: ${runDetails.run!.id}.`,
-            err,
-          );
-        }
-
-        const relatedExperimentId = RunUtils.getFirstExperimentReferenceId(runDetails.run);
-        let experiment: ApiExperiment | undefined;
-        if (relatedExperimentId) {
-          experiment = await Apis.experimentServiceApi.getExperiment(relatedExperimentId);
-        }
-
-        // Build the breadcrumbs, by adding experiment and run names
-        if (experiment) {
-          breadcrumbs.push(
-            { displayName: 'Experiments', href: RoutePage.EXPERIMENTS },
-            {
-              displayName: experiment.name!,
-              href: RoutePage.EXPERIMENT_DETAILS.replace(
-                ':' + RouteParams.experimentId,
-                experiment.id!,
-              ),
-            },
-          );
-        } else {
-          breadcrumbs.push({ displayName: 'All runs', href: RoutePage.RUNS });
-        }
-        breadcrumbs.push({
-          displayName: runDetails.run!.name!,
-          href: RoutePage.RUN_DETAILS.replace(':' + RouteParams.runId, fromRunId),
-        });
-        pageTitle = 'Pipeline details';
-      } catch (err) {
-        await this.showPageError('Cannot retrieve run details.', err);
-        logger.error('Cannot retrieve run details.', err);
-      }
-    } else {
-      // if fromRunId is not specified, then we have a full pipeline
-      const pipelineId = this.props.match.params[RouteParams.pipelineId];
-
-      try {
-        pipeline = await Apis.pipelineServiceApi.getPipeline(pipelineId);
-      } catch (err) {
-        await this.showPageError('Cannot retrieve pipeline details.', err);
-        logger.error('Cannot retrieve pipeline details.', err);
-        return;
-      }
-
-      const versionId = this.props.match.params[RouteParams.pipelineVersionId];
-
-      try {
-        // TODO(rjbauer): it's possible we might not have a version, even default
-        if (versionId) {
-          version = await Apis.pipelineServiceApi.getPipelineVersion(versionId);
-        }
-      } catch (err) {
-        await this.showPageError('Cannot retrieve pipeline version.', err);
-        logger.error('Cannot retrieve pipeline version.', err);
-        return;
-      }
-
-      selectedVersion = versionId ? version! : pipeline.default_version;
-
-      if (!selectedVersion) {
-        // An empty pipeline, which doesn't have any version.
-        pageTitle = pipeline.name!;
-        const actions = this.props.toolbarProps.actions;
-        actions[ButtonKeys.DELETE_RUN].disabled = true;
-        this.props.updateToolbar({ actions });
-      } else {
-        // Fetch manifest for the selected version under this pipeline.
-        pageTitle = pipeline.name!.concat(' (', selectedVersion!.name!, ')');
-        try {
-          // TODO(jingzhang36): pagination not proper here. so if many versions,
-          // the page size value should be?
-          versions =
-            (
-              await Apis.pipelineServiceApi.listPipelineVersions(
-                'PIPELINE',
-                pipelineId,
-                50,
-                undefined,
-                'created_at desc',
-              )
-            ).versions || [];
-        } catch (err) {
-          await this.showPageError('Cannot retrieve pipeline versions.', err);
-          logger.error('Cannot retrieve pipeline versions.', err);
-          return;
-        }
-        templateString = await this._getTemplateString(pipelineId, versionId);
-      }
-
-      breadcrumbs = [{ displayName: 'Pipelines', href: RoutePage.PIPELINES }];
-    }
+    breadcrumbs = [{ displayName: 'Pipelines', href: RoutePage.PIPELINES }];
+    templateString = '# Copyright 2020 kubeflow.org\n#\n# Licensed under the Apache License, Version 2.0 (the "License");\n# you may not use this file except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#      http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an "AS IS" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-1\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip)\' \'heads\'); exit\\n      \ $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip\n---\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-2\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip-again)\' \'tails\');\\n      \ exit $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip-again\n---\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-3\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip)\' \'tails\'); exit\\n      \ $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: flip\nspec:\n  results:\n  - description: /tmp/output\n    name: output\n  steps:\n  - args:\n    - python -c "import random; result = \'heads\' if random.randint(0,1) == 0 else\n      \'tails\'; print(result)" | tee $(results.output.path)\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n    name: flip\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: flip-again\nspec:\n  results:\n  - description: /tmp/output\n    name: output\n  steps:\n  - args:\n    - python -c "import random; result = \'heads\' if random.randint(0,1) == 0 else\n      \'tails\'; print(result)" | tee $(results.output.path)\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n    name: flip-again\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: print1\nspec:\n  params:\n  - name: flip-again-output\n  steps:\n  - command:\n    - echo\n    - $(inputs.params.flip-again-output)\n    image: alpine:3.6\n    name: print1\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: print2\nspec:\n  params:\n  - name: flip-again-output\n  steps:\n  - command:\n    - echo\n    - $(inputs.params.flip-again-output)\n    image: alpine:3.6\n    name: print2\n---\napiVersion: tekton.dev/v1beta1\nkind: Pipeline\nmetadata:\n  annotations:\n    pipelines.kubeflow.org/pipeline_spec: \'{"description": "Shows how to use dsl.Condition.",\n      "name": "Flip Coin Example Pipeline"}\'\n    sidecar.istio.io/inject: \'false\'\n  name: flip-coin-example-pipeline\nspec:\n  params: []\n  tasks:\n  - name: flip\n    params: []\n    taskRef:\n      name: flip\n  - conditions:\n    - conditionRef: condition-1\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: flip-again\n    params: []\n    taskRef:\n      name: flip-again\n  - conditions:\n    - conditionRef: condition-2\n      params:\n      - name: flip-again\n        value: $(tasks.flip-again.results.output)\n    - conditionRef: condition-1\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: print1\n    params:\n    - name: flip-again-output\n      value: $(tasks.flip-again.results.output)\n    taskRef:\n      name: print1\n  - conditions:\n    - conditionRef: condition-3\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: print2\n    params:\n    - name: flip-again-output\n      value: $(tasks.flip-again.results.output)\n    taskRef:\n      name: print2'
+    // condition: '# Copyright 2020 kubeflow.org\n#\n# Licensed under the Apache License, Version 2.0 (the "License");\n# you may not use this file except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#      http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an "AS IS" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-1\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip)\' \'heads\'); exit\\n      \ $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip\n---\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-2\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip-again)\' \'tails\');\\n      \ exit $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip-again\n---\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-3\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip)\' \'tails\'); exit\\n      \ $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: flip\nspec:\n  results:\n  - description: /tmp/output\n    name: output\n  steps:\n  - args:\n    - python -c "import random; result = \'heads\' if random.randint(0,1) == 0 else\n      \'tails\'; print(result)" | tee $(results.output.path)\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n    name: flip\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: flip-again\nspec:\n  results:\n  - description: /tmp/output\n    name: output\n  steps:\n  - args:\n    - python -c "import random; result = \'heads\' if random.randint(0,1) == 0 else\n      \'tails\'; print(result)" | tee $(results.output.path)\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n    name: flip-again\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: print1\nspec:\n  params:\n  - name: flip-again-output\n  steps:\n  - command:\n    - echo\n    - $(inputs.params.flip-again-output)\n    image: alpine:3.6\n    name: print1\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: print2\nspec:\n  params:\n  - name: flip-again-output\n  steps:\n  - command:\n    - echo\n    - $(inputs.params.flip-again-output)\n    image: alpine:3.6\n    name: print2\n---\napiVersion: tekton.dev/v1beta1\nkind: Pipeline\nmetadata:\n  annotations:\n    pipelines.kubeflow.org/pipeline_spec: \'{"description": "Shows how to use dsl.Condition.",\n      "name": "Flip Coin Example Pipeline"}\'\n    sidecar.istio.io/inject: \'false\'\n  name: flip-coin-example-pipeline\nspec:\n  params: []\n  tasks:\n  - name: flip\n    params: []\n    taskRef:\n      name: flip\n  - conditions:\n    - conditionRef: condition-1\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: flip-again\n    params: []\n    taskRef:\n      name: flip-again\n  - conditions:\n    - conditionRef: condition-2\n      params:\n      - name: flip-again\n        value: $(tasks.flip-again.results.output)\n    - conditionRef: condition-1\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: print1\n    params:\n    - name: flip-again-output\n      value: $(tasks.flip-again.results.output)\n    taskRef:\n      name: print1\n  - conditions:\n    - conditionRef: condition-3\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: print2\n    params:\n    - name: flip-again-output\n      value: $(tasks.flip-again.results.output)\n    taskRef:\n      name: print2'
+    // sequential: '# Copyright 2020 kubeflow.org\n#\n# Licensed under the Apache License, Version 2.0 (the "License");\n# you may not use this file except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#      http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an "AS IS" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\n\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: gcs-download\nspec:\n  params:\n  - name: url\n  steps:\n  - args:\n    - gsutil cat $0 | tee $1\n    - $(inputs.params.url)\n    - /tmp/results.txt\n    command:\n    - sh\n    - -c\n    image: google/cloud-sdk:216.0.0\n    name: gcs-download\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: echo\nspec:\n  params:\n  - name: path\n  steps:\n  - args:\n    - echo "$0"\n    - $(inputs.params.path)\n    command:\n    - sh\n    - -c\n    image: library/bash:4.4.23\n    name: echo\n---\napiVersion: tekton.dev/v1beta1\nkind: Pipeline\nmetadata:\n  annotations:\n    pipelines.kubeflow.org/pipeline_spec: \'{"description": "A pipeline with two sequential\n      steps.", "inputs": [{"default": "gs://ml-pipeline-playground/shakespeare1.txt",\n      "name": "url", "optional": true}, {"default": "/tmp/results.txt", "name": "path",\n      "optional": true}], "name": "Sequential pipeline"}\'\n    sidecar.istio.io/inject: \'false\'\n  name: sequential-pipeline\nspec:\n  params:\n  - default: gs://ml-pipeline-playground/shakespeare1.txt\n    name: url\n  - default: /tmp/results.txt\n    name: path\n  tasks:\n  - name: gcs-download\n    params:\n    - name: url\n      value: $(params.url)\n    taskRef:\n      name: gcs-download\n  - name: echo\n    params:\n    - name: path\n      value: $(params.path)\n    runAfter:\n    - gcs-download\n    taskRef:\n      name: echo'
+    
+    await axios({
+      method: "get",
+      url: apiUrl,
+    }).then(function(res) {
+      console.log("Created new run");
+      templateString = res.data.status
+    }).catch(function(error) {
+      console.log("Create new run failed");
+      console.log(error)
+    })
 
     this.props.updateToolbar({ breadcrumbs, actions: toolbarActions, pageTitle });
 
@@ -532,8 +431,9 @@ class PipelineDetails extends Page<{}, PipelineDetailsState> {
   private async _createGraph(templateString: string): Promise<dagre.graphlib.Graph | null> {
     if (templateString) {
       try {
-        const template = JsYaml.safeLoad(templateString);
-        return StaticGraphParser.createGraph(template!);
+        const template = JsYaml.safeLoadAll(templateString);
+        const toReturn = StaticGraphParser.createGraph(template!);
+        return toReturn;
       } catch (err) {
         await this.showPageError('Error: failed to generate Pipeline graph.', err);
       }

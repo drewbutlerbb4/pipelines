@@ -97,11 +97,30 @@ export function checkIfTerminated(status?: NodePhase, nodeMessage?: string): Nod
   return status;
 }
 
-export function parseNodePhase(node: NodeStatus): NodePhase {
+export function parseNodePhase(node: any): NodePhase {
   if (node.phase !== 'Succeeded') {
     return node.phase as NodePhase; // HACK: NodePhase is a string enum that has the same items as node.phase.
   }
   return wasNodeCached(node) ? NodePhase.CACHED : NodePhase.SUCCEEDED;
+}
+
+export function parseFromAPI(node: any): NodePhase {
+  if (node.phase == 'Succeeded') {
+    return NodePhase.SUCCEEDED
+  } else if (node.phase == 'Pending') {
+    return NodePhase.PENDING
+  } else {
+    return NodePhase.ERROR
+  }
+}
+
+
+export function parseConditionPhaseFromParent(node: any): NodePhase {
+  if (node.phase == 'Pending') {
+    return NodePhase.RUNNING
+  } else {
+    return NodePhase.SUCCEEDED
+  }
 }
 
 function wasNodeCached(node: NodeStatus): boolean {

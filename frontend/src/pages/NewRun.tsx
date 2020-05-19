@@ -56,6 +56,7 @@ import { CustomRendererProps } from '../components/CustomTable';
 import { Description } from '../components/Description';
 import { NamespaceContext } from '../lib/KubeflowClient';
 import { NameWithTooltip } from '../components/CustomTableNameColumn';
+import axios from 'axios';
 
 interface NewRunState {
   description: string;
@@ -225,43 +226,6 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
               variant='outlined'
               InputProps={{
                 classes: { disabled: css.nonEditableInput },
-                endAdornment: (
-                  <InputAdornment position='end'>
-                    <Button
-                      color='secondary'
-                      id='choosePipelineBtn'
-                      onClick={() => this.setStateSafe({ pipelineSelectorOpen: true })}
-                      style={{ padding: '3px 5px', margin: 0 }}
-                    >
-                      Choose
-                    </Button>
-                  </InputAdornment>
-                ),
-                readOnly: true,
-              }}
-            />
-          )}
-          {!useWorkflowFromRun && (
-            <Input
-              value={pipelineVersionName}
-              required={true}
-              label='Pipeline Version'
-              disabled={true}
-              variant='outlined'
-              InputProps={{
-                classes: { disabled: css.nonEditableInput },
-                endAdornment: (
-                  <InputAdornment position='end'>
-                    <Button
-                      color='secondary'
-                      id='choosePipelineVersionBtn'
-                      onClick={() => this.setStateSafe({ pipelineVersionSelectorOpen: true })}
-                      style={{ padding: '3px 5px', margin: 0 }}
-                    >
-                      Choose
-                    </Button>
-                  </InputAdornment>
-                ),
                 readOnly: true,
               }}
             />
@@ -442,49 +406,6 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
             </DialogActions>
           </Dialog>
 
-          {/* Run metadata inputs */}
-          <Input
-            label={isRecurringRun ? 'Recurring run config name' : 'Run name'}
-            required={true}
-            onChange={this.handleChange('runName')}
-            autoFocus={true}
-            value={runName}
-            variant='outlined'
-          />
-          <Input
-            label='Description (optional)'
-            multiline={true}
-            onChange={this.handleChange('description')}
-            value={description}
-            variant='outlined'
-          />
-
-          {/* Experiment selection */}
-          <div>This run will be associated with the following experiment</div>
-          <Input
-            value={experimentName}
-            required={true}
-            label='Experiment'
-            disabled={true}
-            variant='outlined'
-            InputProps={{
-              classes: { disabled: css.nonEditableInput },
-              endAdornment: (
-                <InputAdornment position='end'>
-                  <Button
-                    color='secondary'
-                    id='chooseExperimentBtn'
-                    onClick={() => this.setStateSafe({ experimentSelectorOpen: true })}
-                    style={{ padding: '3px 5px', margin: 0 }}
-                  >
-                    Choose
-                  </Button>
-                </InputAdornment>
-              ),
-              readOnly: true,
-            }}
-          />
-
           {/* One-off/Recurring Run Type */}
           <div className={commonCss.header}>Run Type</div>
           {isClone && <span>{isRecurringRun ? 'Recurring' : 'One-off'}</span>}
@@ -590,6 +511,7 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
     // Get clone run id from querystring if any
     const originalRunId = urlParser.get(QUERY_PARAMS.cloneFromRun);
     const originalRecurringRunId = urlParser.get(QUERY_PARAMS.cloneFromRecurringRun);
+    const possiblePipelineId = urlParser.get(QUERY_PARAMS.pipelineId);
     // If we are not cloning from an existing run, we may have an embedded pipeline from a run from
     // a notebook. This is a somewhat hidden path that can be reached via the following steps:
     // 1. Create a pipeline and run it from a notebook
@@ -631,7 +553,6 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
     } else {
       // If we create a run from an existing pipeline version.
       // Get pipeline and pipeline version id from querystring if any
-      const possiblePipelineId = urlParser.get(QUERY_PARAMS.pipelineId);
       if (possiblePipelineId) {
         try {
           const pipeline = await Apis.pipelineServiceApi.getPipeline(possiblePipelineId);
@@ -674,11 +595,6 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
           }
         } catch (err) {
           urlParser.clear(QUERY_PARAMS.pipelineId);
-          await this.showPageError(
-            `Error: failed to retrieve pipeline: ${possiblePipelineId}.`,
-            err,
-          );
-          logger.error(`Failed to retrieve pipeline: ${possiblePipelineId}`, err);
         }
       }
     }
@@ -710,6 +626,7 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
     this.props.updateToolbar({ actions: this.props.toolbarProps.actions, breadcrumbs, pageTitle });
 
     this.setStateSafe({
+      pipelineName: possiblePipelineId ? possiblePipelineId : undefined,
       experiment,
       experimentName,
       isFirstRunInExperiment: urlParser.get(QUERY_PARAMS.firstRunInExperiment) === '1',
@@ -987,62 +904,25 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
   }
 
   private _start(): void {
-    if (!this.state.pipelineVersion && !this.state.workflowFromRun) {
-      this.showErrorDialog('Run creation failed', 'Cannot start run without pipeline version');
-      logger.error('Cannot start run without pipeline version');
-      return;
-    }
-    const references: ApiResourceReference[] = [];
-    if (this.state.experiment) {
-      references.push({
-        key: {
-          id: this.state.experiment.id,
-          type: ApiResourceType.EXPERIMENT,
-        },
-        relationship: ApiRelationship.OWNER,
-      });
-    }
-    if (this.state.pipelineVersion) {
-      references.push({
-        key: {
-          id: this.state.pipelineVersion!.id,
-          type: ApiResourceType.PIPELINEVERSION,
-        },
-        relationship: ApiRelationship.CREATOR,
-      });
-    }
 
-    let newRun: ApiRun | ApiJob = {
-      description: this.state.description,
-      name: this.state.runName,
-      pipeline_spec: {
-        parameters: (this.state.parameters || []).map(p => {
-          p.value = (p.value || '').trim();
-          return p;
-        }),
-        workflow_manifest: this.state.useWorkflowFromRun
-          ? JSON.stringify(this.state.workflowFromRun)
-          : undefined,
-      },
-      resource_references: references,
-    };
-    if (this.state.isRecurringRun) {
-      newRun = Object.assign(newRun, {
-        enabled: true,
-        max_concurrency: this.state.maxConcurrentRuns || '1',
-        no_catchup: !this.state.catchup,
-        trigger: this.state.trigger,
-      });
-    }
+    const urlParser = new URLParser(this.props);
+    const possiblePipelineId = urlParser.get(QUERY_PARAMS.pipelineId);
+    const apiUrl = 'http://127.0.0.1:5000/start/' + possiblePipelineId;
 
     this.setStateSafe({ isBeingStarted: true }, async () => {
       // TODO: there was previously a bug here where the await wasn't being applied to the API
       // calls, so a run creation could fail, and the success path would still be taken. We need
       // tests for this and other similar situations.
       try {
-        this.state.isRecurringRun
-          ? await Apis.jobServiceApi.createJob(newRun)
-          : await Apis.runServiceApi.createRun(newRun);
+        await axios({
+          method: "get",
+          url: apiUrl,
+        }).then(function(res) {
+          console.log("Created new run");
+        }).catch(function(error) {
+          console.log("Create new run failed");
+          console.log(error)
+        })
       } catch (err) {
         const errorMessage = await errorToMessage(err);
         this.showErrorDialog('Run creation failed', errorMessage);
@@ -1052,18 +932,12 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
         this.setStateSafe({ isBeingStarted: false });
       }
 
-      if (this.state.experiment) {
-        this.props.history.push(
-          RoutePage.EXPERIMENT_DETAILS.replace(
-            ':' + RouteParams.experimentId,
-            this.state.experiment.id!,
-          ),
-        );
-      } else {
-        this.props.history.push(RoutePage.RUNS);
-      }
+      this.props.history.push(
+        RoutePage.RUN_DETAILS
+      );
+
       this.props.updateSnackbar({
-        message: `Successfully started new Run: ${newRun.name}`,
+        message: `Successfully started new Run`,
         open: true,
       });
     });
@@ -1103,12 +977,6 @@ export class NewRun extends Page<{ namespace?: string }, NewRunState> {
     // Validate state
     const { pipelineVersion, workflowFromRun, maxConcurrentRuns, runName, trigger } = this.state;
     try {
-      if (!pipelineVersion && !workflowFromRun) {
-        throw new Error('A pipeline version must be selected');
-      }
-      if (!runName) {
-        throw new Error('Run name is required');
-      }
 
       const hasTrigger = trigger && (!!trigger.cron_schedule || !!trigger.periodic_schedule);
       if (hasTrigger) {

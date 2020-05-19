@@ -29,6 +29,7 @@ import { commonCss, color } from '../Css';
 import { formatDateString, logger, errorToMessage, getRunDuration } from '../lib/Utils';
 import { statusToIcon } from './Status';
 import Tooltip from '@material-ui/core/Tooltip';
+import axios from 'axios';
 
 interface PipelineVersionInfo {
   displayName?: string;
@@ -313,76 +314,24 @@ class RunList extends React.PureComponent<RunListProps, RunListState> {
     let displayRuns: DisplayRun[] = [];
     let nextPageToken = '';
 
-    if (Array.isArray(this.props.runIdListMask)) {
-      displayRuns = this.props.runIdListMask.map(id => ({ run: { id } }));
-      // listRuns doesn't currently support batching by IDs, so in this case we retrieve each run
-      // individually.
-      await this._getAndSetRuns(displayRuns);
-    } else {
-      // Load all runs
-      if (this.props.storageState) {
-        try {
-          // Augment the request filter with the storage state predicate
-          const filter = JSON.parse(
-            decodeURIComponent(request.filter || '{"predicates": []}'),
-          ) as ApiFilter;
-          filter.predicates = (filter.predicates || []).concat([
-            {
-              key: 'storage_state',
-              // Use EQUALS ARCHIVED or NOT EQUALS ARCHIVED to account for cases where the field
-              // is missing, in which case it should be counted as available.
-              op:
-                this.props.storageState === RunStorageState.ARCHIVED
-                  ? PredicateOp.EQUALS
-                  : PredicateOp.NOTEQUALS,
-              string_value: RunStorageState.ARCHIVED.toString(),
-            },
-          ]);
-          request.filter = encodeURIComponent(JSON.stringify(filter));
-        } catch (err) {
-          logger.error('Could not parse request filter: ', request.filter);
-        }
-      }
 
-      try {
-        let resourceReference: {
-          keyType?: 'EXPERIMENT' | 'NAMESPACE';
-          keyId?: string;
-        } = {};
-        if (this.props.experimentIdMask) {
-          resourceReference = {
-            keyType: 'EXPERIMENT',
-            keyId: this.props.experimentIdMask,
-          };
-        } else if (this.props.namespaceMask) {
-          resourceReference = {
-            keyType: 'NAMESPACE',
-            keyId: this.props.namespaceMask,
-          };
-        }
-        const response = await Apis.runServiceApi.listRuns(
-          request.pageToken,
-          request.pageSize,
-          request.sortBy,
-          resourceReference.keyType,
-          resourceReference.keyId,
-          request.filter,
-        );
+    await axios({
+      method: "get",
+      url: 'http://127.0.0.1:5000/run_list',
+    }).then(function(res) {
+      console.log("Get run list succeeded");
+      console.log(res);
+      res.data.status.forEach((run: any) => {
+        const displayRun: DisplayRun = {run: {name: run, id: run}};
+        displayRuns.push(displayRun);
+      })
+    }).catch(function(error) {
+      console.log("Get run list failed");
+      console.log(error)
+    })
 
-        displayRuns = (response.runs || []).map(r => ({ run: r }));
-        nextPageToken = response.next_page_token || '';
-      } catch (err) {
-        const error = new Error(await errorToMessage(err));
-        this.props.onError('Error: failed to fetch runs.', error);
-        // No point in continuing if we couldn't retrieve any runs.
-        return '';
-      }
-    }
-
-    await this._setColumns(displayRuns);
 
     this.setState({
-      metrics: RunUtils.extractMetricMetadata(displayRuns.map(r => r.run)),
       runs: displayRuns,
     });
     return nextPageToken;

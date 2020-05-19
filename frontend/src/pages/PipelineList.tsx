@@ -36,6 +36,7 @@ import { formatDateString, errorToMessage } from '../lib/Utils';
 import { Description } from '../components/Description';
 import produce from 'immer';
 import Tooltip from '@material-ui/core/Tooltip';
+import axios from 'axios';
 
 interface DisplayPipeline extends ApiPipeline {
   expandState?: ExpandState;
@@ -90,6 +91,26 @@ class PipelineList extends Page<{}, PipelineListState> {
     };
   }
 
+  public async getPipelineList(): Promise<void>{
+
+    let pipelineList : DisplayPipeline[] = [];
+
+    await axios({
+      method: "get",
+      url: 'http://127.0.0.1:5000/pipeline_list',
+    }).then(function(res) {
+      console.log("Created new run");
+      pipelineList = res.data.status;
+    }).catch(function(error) {
+      console.log("Create new run failed");
+      console.log(error)
+    })
+
+    this.setStateSafe({
+      displayPipelines: pipelineList
+    });
+  }
+
   public render(): JSX.Element {
     const columns: Column[] = [
       {
@@ -101,6 +122,8 @@ class PipelineList extends Page<{}, PipelineListState> {
       { label: 'Description', flex: 3, customRenderer: descriptionCustomRenderer },
       { label: 'Uploaded on', sortKey: PipelineSortKeys.CREATED_AT, flex: 1 },
     ];
+
+    //this.getPipelineList();
 
     const rows: Row[] = this.state.displayPipelines.map(p => {
       return {
@@ -169,24 +192,13 @@ class PipelineList extends Page<{}, PipelineListState> {
 
   private async _reload(request: ListRequest): Promise<string> {
     let response: ApiListPipelinesResponse | null = null;
-    let displayPipelines: DisplayPipeline[];
     try {
-      response = await Apis.pipelineServiceApi.listPipelines(
-        request.pageToken,
-        request.pageSize,
-        request.sortBy,
-        request.filter,
-      );
-      displayPipelines = response.pipelines || [];
-      displayPipelines.forEach(exp => (exp.expandState = ExpandState.COLLAPSED));
-      this.clearBanner();
+      this.getPipelineList();
     } catch (err) {
       await this.showPageError('Error: failed to retrieve list of pipelines.', err);
     }
 
-    this.setStateSafe({ displayPipelines: (response && response.pipelines) || [] });
-
-    return response ? response.next_page_token || '' : '';
+    return '';
   }
 
   private _nameCustomRenderer: React.FC<CustomRendererProps<string>> = (
