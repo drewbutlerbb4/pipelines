@@ -127,6 +127,22 @@ export default class WorkflowParser {
         }
       }
 
+      // Adds dependencies from task params
+      for (const param of (task['params'] || [])) {
+  
+        const dep = /^(\$\(tasks\.[^.]*)/.exec(param['value']);  // A regex for checking if the params are being passed from another task
+        if (dep){
+          const parentTask = dep[0].substring(dep[0].indexOf(".") + 1);
+          edges.push({parent: parentTask, child: task['name']});
+        }
+      }
+      
+      if (task['taskSpec']['runAfter']) {
+        task['runAfter'].forEach((depTask: any)=> {
+          graph.setEdge(depTask, task['name'])
+        });
+      }
+
       // If the task has a status or is pending then add it and its edges to the graph
       if (statusMap.get(task['name']) || isTaskPending) {
         for (const edge of (edges || [])) 
