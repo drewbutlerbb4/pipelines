@@ -52,26 +52,27 @@ export class SelectedNodeInfo {
   }
 }
 
-export function _populateInfoFromTemplate(
+export function _populateInfoFromTask(
   info: SelectedNodeInfo,
-  template?: Template,
+  task?: any,
 ): SelectedNodeInfo {
 
-  if (!template) {
+  if (!task) {
     return info;
   }
 
   info.nodeType = 'container';
-  if (template['spec']['steps']){
-    info.args = template['spec']['steps'][0]['args'];
-    info.command = template['spec']['steps'][0]['command'];
-    info.image = template['spec']['steps'][0]['image'];
+  if (task['taskSpec'] && task['taskSpec']['steps']){
+    const steps = task['taskSpec']['steps']
+    info.args = steps[0]['args'] || [];
+    info.command = steps[0]['command'] || [];
+    info.image = steps[0]['image'] || [];
   }
 
-  if (template['spec']['params'])
-    info.inputs = (template['spec']['params'] || []).map((p: any) => [p['name'], p['value'] || '']);
-  if (template['spec']['results'])
-    info.outputs = (template['spec']['results'] || []).map((p: any) => {return [p['name'], p['description'] || '']});
+  if (task['taskSpec'] && task['taskSpec']['params'])
+    info.inputs = (task['taskSpec']['params'] || []).map((p: any) => [p['name'], p['value'] || '']);
+  if (task['taskSpec']['results'])
+    info.outputs = (task['taskSpec']['results'] || []).map((p: any) => {return [p['name'], p['description'] || '']});
 
   return info;
 }
@@ -81,39 +82,17 @@ export function createGraph(workflow: any): dagre.graphlib.Graph {
   graph.setGraph({});
   graph.setDefaultEdgeLabel(() => ({}));
 
-  const templates = new Map<string, { templateType: string; template: any }>();
-
-  let pipelineTemplateId = workflow[0]['metadata']['name'];
-
-  // Iterate through the workflow's templates to construct a map which will be used to traverse and
-  // construct the graph
-  for (const template of workflow) {
-
-    if (template['kind'] == 'Task' || template['kind'] == 'Condition'){
-      templates.set(template['metadata']['name'], {templateType: 'task', template})
-    }
-    else if (template['kind'] == 'Pipeline'){
-      templates.set(template['metadata']['name'], {templateType: 'pipeline', template})
-      pipelineTemplateId = template['metadata']['name']
-    } else {
-      throw new Error(
-        `Unknown template kind: ${template['kind']} on workflow template: ${template['metadata']['name']}`,
-      );
-    }
-  }
-
-  buildTektonDag(graph, pipelineTemplateId, templates);
+  buildTektonDag(graph, workflow[0]);
   return graph;
 }
 
 function buildTektonDag(
   graph: dagre.graphlib.Graph,
-  pipelineId: string,
-  templates: Map<string, { templateType: string; template: any }>
+  template: any
   ): void {
 
-  const pipeline = templates.get(pipelineId)!['template']
-  const tasks = pipeline['spec']['tasks']
+  const pipeline = template
+  const tasks = pipeline['spec']['pipelineSpec']['tasks']
 
   for (const task of tasks){
 
@@ -128,7 +107,6 @@ function buildTektonDag(
 
     // Adds any dependencies that arise from Conditions and tracks these dependencies to make sure they aren't duplicated in the case that
     // the Condition and the base task use output from the same dependency
-    const conditionDeps = []
     for (const condition of (task['conditions'] || [])){
       for (const condParam of (condition['params'] || [])) {
         const conditionDep = /^(\$\(tasks\.[^.]*)/.exec(condParam['value']);  // A regex for checking if the params are being passed from another task
@@ -138,7 +116,7 @@ function buildTektonDag(
           graph.setEdge(condition['conditionRef'], taskName)
 
           const condInfo = new SelectedNodeInfo();
-          _populateInfoFromTemplate(condInfo, templates.get(taskName)!['template'])
+          _populateInfoFromTask(condInfo, task)
       
           // Add a node for the Condition itself
           graph.setNode(condition['conditionRef'], {
@@ -152,7 +130,7 @@ function buildTektonDag(
       }
     }
 
-    for (const params of task['params']) {
+    for (const params of (task['params'] || [])) {
       const searchDep = /^(\$\(tasks\.[^.]*)/.exec(params['value']);  // A regex for checking if the params are being passed from another task
       if (searchDep){
         const parentTask = searchDep[0].substring(searchDep[0].indexOf(".") + 1)
@@ -162,7 +140,7 @@ function buildTektonDag(
 
     // Add the info for this node
     const info = new SelectedNodeInfo();
-    _populateInfoFromTemplate(info, templates.get(taskName)!['template'])
+    _populateInfoFromTask(info, task)
 
     graph.setNode(taskName, {
       bgColor: task.when ? 'cornsilk' : undefined,

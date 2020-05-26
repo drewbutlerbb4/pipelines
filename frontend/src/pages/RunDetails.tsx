@@ -76,7 +76,6 @@ import WorkflowParser, { Status } from '../lib/WorkflowParser';
 import { ExecutionDetailsContent } from './ExecutionDetails';
 import { Page, PageProps } from './Page';
 import { statusToIcon } from './Status';
-import axios from 'axios';
 
 enum SidePaneTab {
   ARTIFACTS,
@@ -132,8 +131,6 @@ interface RunDetailsState {
   workflow?: Workflow;
   mlmdRunContext?: Context;
   mlmdExecutions?: Execution[];
-  apiResponse?: any;
-  templates?: any;
 }
 
 export const css = stylesheet({
@@ -194,10 +191,12 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
     return {
       actions: buttons
         .retryRun(
-          () => {
-            const x : string[] = []
-            return x
-          },
+          () =>
+          this.state.runMetadata
+            ? [this.state.runMetadata!.id!]
+            : runIdFromParams
+            ? [runIdFromParams]
+            : [],
           true,
           () => this.retry(),
         )
@@ -273,7 +272,7 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
 
     return (
       <div className={classes(commonCss.page, padding(20, 't'))}>
-        {true && (
+        {!!workflow && (
           <div className={commonCss.page}>
             <MD2Tabs
               selectedTab={selectedTab}
@@ -338,7 +337,7 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
                                       nodeId={this.state.selectedNodeDetails.id}
                                       nodeStatus={
                                         this.state.workflow && this.state.workflow.status
-                                          ? this.state.workflow.status.nodes[
+                                          ? this.state.workflow.status[
                                               this.state.selectedNodeDetails.id
                                             ]
                                           : undefined
@@ -355,7 +354,7 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
 
                                 {sidepanelSelectedTab === SidePaneTab.INPUT_OUTPUT && (
                                   <div className={padding(20)}>
-                                    <DetailsTable title='Input parameters' fields={this._getTaskParams()} />
+                                    <DetailsTable title='Input parameters' fields={inputParams} />
 
                                     <DetailsTable
                                       title='Input artifacts'
@@ -365,7 +364,7 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
                                       )}
                                     />
 
-                                    <DetailsTable title='Output parameters' fields={this._getTaskResults()} />
+                                    <DetailsTable title='Output parameters' fields={outputParams} />
 
                                     <DetailsTable
                                       title='Output artifacts'
@@ -410,6 +409,30 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
                                     {!selectedExecution && (
                                       <div>Corresponding ML Metadata not found.</div>
                                     )}
+                                  </div>
+                                )}
+
+                                {sidepanelSelectedTab === SidePaneTab.VOLUMES && (
+                                  <div className={padding(20)}>
+                                    <DetailsTable
+                                      title='Volume Mounts'
+                                      fields={WorkflowParser.getNodeVolumeMounts(
+                                        workflow,
+                                        selectedNodeId,
+                                      )}
+                                    />
+                                  </div>
+                                )}
+
+                                {sidepanelSelectedTab === SidePaneTab.MANIFEST && (
+                                  <div className={padding(20)}>
+                                    <DetailsTable
+                                      title='Resource Manifest'
+                                      fields={WorkflowParser.getNodeManifest(
+                                        workflow,
+                                        selectedNodeId,
+                                      )}
+                                    />
                                   </div>
                                 )}
 
@@ -538,8 +561,16 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
                 <div className={padding()}>
                   <DetailsTable
                     title='Run details'
-                    fields={this._getDetailsFields()}
+                    fields={this._getDetailsFields(workflow, runMetadata)}
                   />
+                  {workflowParameters && !!workflowParameters.length && (
+                    <div>
+                      <DetailsTable
+                        title='Run parameters'
+                        fields={workflowParameters.map(p => [p.name, p.value || ''])}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -572,34 +603,9 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
 
   public async retry(): Promise<void> {
     const runFinished = false;
-    await axios({
-      method: "get",
-      url: 'http://127.0.0.1:5000/start/pipeline',
-    }).then(function(res) {
-      console.log("Created new run");
-    }).catch(function(error) {
-      console.log("Create new run failed");
-      console.log(error)
-    })
-    const pageTitle = (
-      <div className={commonCss.flex}>
-        <span style={{ marginLeft: 10 }}>{}</span>
-      </div>
-    );
-
-    const graph = undefined;
-    //const runFinished = true;
-    //this._stopAutoRefresh();
-    this.setStateSafe({
-      graph
-    });
-    this.props.updateToolbar({
-      pageTitle
-    });
     this.setStateSafe({
       runFinished,
     });
-
     await this._startAutoRefresh();
   }
 
@@ -611,59 +617,80 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
     this.clearBanner();
     const runId = this.props.match.params[RouteParams.runId];
 
-    let curStatus = {
-      workflowNodes: [
-        {
-          id: "flip",
-          startedAt: Date(),
-          finishedAt: Date(),
-          message: "ay",
-          phase: NodePhase.SUCCEEDED
-        },
-        {
-          id: "flip-again",
-          startedAt: Date(),
-          finishedAt: Date(),
-          message: "ay-again",
-          phase: NodePhase.PENDING
-        }
-      ]
-    };
-    curStatus = {workflowNodes: []};
-    let apiResponse = undefined;
-    let runName = "No run name found";
-    let runStatus : string = 'Pending';
-    let completionTime: string = Date();
-
-    await axios({
-      method: "get",
-      url: 'http://127.0.0.1:5000/logs',
-    }).then(function(res) {
-      console.log("Get logs worked");
-      console.log(res.data)
-      curStatus = {workflowNodes: res.data['status']['workflowNodes']}
-      runName = res.data['status']['runName']
-      runStatus = res.data['status']['runPhase']
-      completionTime = res.data['status']['completionTime']
-      curStatus.workflowNodes.forEach((node) => {
-        node.phase = parseFromAPI(node)
-      })
-      apiResponse = res.data
-    }).catch(function(error) {
-      console.log("Get logs failed");
-      console.log(error)
-    })
+    try {
+      const allowCustomVisualizations = await Apis.areCustomVisualizationsAllowed();
+      this.setState({ allowCustomVisualizations });
+    } catch (err) {
+      this.showPageError('Error: Unable to enable custom visualizations.', err);
+    }
 
     try {
+      const runDetail = await Apis.runServiceApi.getRun(runId);
+      console.log("This RUn Detail");
+      console.log(runDetail);
 
-      // Build runtime graph
-      //const graph =
-      //  workflow && workflow.status && workflow.status.nodes
-      //    ? WorkflowParser.createRuntimeGraph(workflow)
-      //    : undefined;
+      const relatedExperimentId = RunUtils.getFirstExperimentReferenceId(runDetail.run);
+      let experiment: ApiExperiment | undefined;
+      if (relatedExperimentId) {
+        experiment = await Apis.experimentServiceApi.getExperiment(relatedExperimentId);
+      }
 
-      const templateString = '# Copyright 2020 kubeflow.org\n#\n# Licensed under the Apache License, Version 2.0 (the "License");\n# you may not use this file except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#      http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an "AS IS" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-1\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip)\' \'heads\'); exit\\n      \ $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip\n---\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-2\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip-again)\' \'tails\');\\n      \ exit $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip-again\n---\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-3\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip)\' \'tails\'); exit\\n      \ $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: flip\nspec:\n  results:\n  - description: /tmp/output\n    name: output\n  steps:\n  - args:\n    - python -c "import random; result = \'heads\' if random.randint(0,1) == 0 else\n      \'tails\'; print(result)" | tee $(results.output.path)\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n    name: flip\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: flip-again\nspec:\n  results:\n  - description: /tmp/output\n    name: output\n  steps:\n  - args:\n    - python -c "import random; result = \'heads\' if random.randint(0,1) == 0 else\n      \'tails\'; print(result)" | tee $(results.output.path)\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n    name: flip-again\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: print1\nspec:\n  params:\n  - name: flip-again-output\n  steps:\n  - command:\n    - echo\n    - $(inputs.params.flip-again-output)\n    image: alpine:3.6\n    name: print1\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: print2\nspec:\n  params:\n  - name: flip-again-output\n  steps:\n  - command:\n    - echo\n    - $(inputs.params.flip-again-output)\n    image: alpine:3.6\n    name: print2\n---\napiVersion: tekton.dev/v1beta1\nkind: Pipeline\nmetadata:\n  annotations:\n    pipelines.kubeflow.org/pipeline_spec: \'{"description": "Shows how to use dsl.Condition.",\n      "name": "Flip Coin Example Pipeline"}\'\n    sidecar.istio.io/inject: \'false\'\n  name: flip-coin-example-pipeline\nspec:\n  params: []\n  tasks:\n  - name: flip\n    params: []\n    taskRef:\n      name: flip\n  - conditions:\n    - conditionRef: condition-1\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: flip-again\n    params: []\n    taskRef:\n      name: flip-again\n  - conditions:\n    - conditionRef: condition-2\n      params:\n      - name: flip-again\n        value: $(tasks.flip-again.results.output)\n    - conditionRef: condition-1\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: print1\n    params:\n    - name: flip-again-output\n      value: $(tasks.flip-again.results.output)\n    taskRef:\n      name: print1\n  - conditions:\n    - conditionRef: condition-3\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: print2\n    params:\n    - name: flip-again-output\n      value: $(tasks.flip-again.results.output)\n    taskRef:\n      name: print2'
-      const { graph, templates } = WorkflowParser.createRuntimeGraph(templateString, curStatus, runStatus)
+      const runMetadata = runDetail.run!;
+
+      let runFinished = this.state.runFinished;
+      // If the run has finished, stop auto refreshing
+      if (hasFinished(runMetadata.status as NodePhase)) {
+        this._stopAutoRefresh();
+        // This prevents other events, such as onFocus, from resuming the autorefresh
+        runFinished = true;
+      }
+
+      const workflow = JSON.parse(
+        runDetail.pipeline_runtime!.workflow_manifest || '{}',
+      );
+      console.log("Workflow");
+      console.log(workflow);
+
+      // Show workflow errors
+      const workflowError = WorkflowParser.getWorkflowError(workflow);
+      if (workflowError) {
+        if (workflowError === 'terminated') {
+          this.props.updateBanner({
+            additionalInfo: `This run's workflow included the following message: ${workflowError}`,
+            message: 'This run was terminated',
+            mode: 'warning',
+            refresh: undefined,
+          });
+        } else {
+          this.showPageError(
+            `Error: found errors when executing run: ${runId}.`,
+            new Error(workflowError),
+          );
+        }
+      }
+
+      let mlmdRunContext: Context | undefined;
+      let mlmdExecutions: Execution[] | undefined;
+      // Get data about this workflow from MLMD
+      if (workflow.metadata?.name) {
+        try {
+          try {
+            mlmdRunContext = await getTfxRunContext(workflow.metadata.name);
+          } catch (err) {
+            logger.warn(`Cannot find tfx run context (this is expected for non tfx runs)`, err);
+            mlmdRunContext = await getKfpRunContext(workflow.metadata.name);
+          }
+          mlmdExecutions = await getExecutionsFromContext(mlmdRunContext);
+        } catch (err) {
+          // Data in MLMD may not exist depending on this pipeline is a TFX pipeline.
+          // So we only log the error in console.
+          logger.warn(err);
+        }
+      }
+
+      let templateString = '# Copyright 2020 kubeflow.org\n#\n# Licensed under the Apache License, Version 2.0 (the "License");\n# you may not use this file except in compliance with the License.\n# You may obtain a copy of the License at\n#\n#      http://www.apache.org/licenses/LICENSE-2.0\n#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an "AS IS" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific language governing permissions and\n# limitations under the License.\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-1\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip)\' \'heads\'); exit\\n      \ $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip\n---\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-2\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip-again)\' \'tails\');\\n      \ exit $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip-again\n---\napiVersion: tekton.dev/v1alpha1\nkind: Condition\nmetadata:\n  name: condition-3\nspec:\n  check:\n    args:\n    - "EXITCODE=$(python -c \'import sys\ninput1=str.rstrip(sys.argv[1])\ninput2=str.rstrip(sys.argv[2])\n\\n      try:\n  input1=int(input1)\n  input2=int(input2)\nexcept:\n  input1=str(input1)\n\\n      print(0) if (input1 == input2) else print(1)\' \'$(params.flip)\' \'tails\'); exit\\n      \ $EXITCODE"\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n  params:\n  - name: flip\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: flip\nspec:\n  results:\n  - description: /tmp/output\n    name: output\n  steps:\n  - args:\n    - python -c "import random; result = \'heads\' if random.randint(0,1) == 0 else\n      \'tails\'; print(result)" | tee $(results.output.path)\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n    name: flip\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: flip-again\nspec:\n  results:\n  - description: /tmp/output\n    name: output\n  steps:\n  - args:\n    - python -c "import random; result = \'heads\' if random.randint(0,1) == 0 else\n      \'tails\'; print(result)" | tee $(results.output.path)\n    command:\n    - sh\n    - -c\n    image: python:alpine3.6\n    name: flip-again\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: print1\nspec:\n  params:\n  - name: flip-again-output\n  steps:\n  - command:\n    - echo\n    - $(inputs.params.flip-again-output)\n    image: alpine:3.6\n    name: print1\n---\napiVersion: tekton.dev/v1beta1\nkind: Task\nmetadata:\n  name: print2\nspec:\n  params:\n  - name: flip-again-output\n  steps:\n  - command:\n    - echo\n    - $(inputs.params.flip-again-output)\n    image: alpine:3.6\n    name: print2\n---\napiVersion: tekton.dev/v1beta1\nkind: Pipeline\nmetadata:\n  annotations:\n    pipelines.kubeflow.org/pipeline_spec: \'{"description": "Shows how to use dsl.Condition.",\n      "name": "Flip Coin Example Pipeline"}\'\n    sidecar.istio.io/inject: \'false\'\n  name: flip-coin-example-pipeline\nspec:\n  params: []\n  tasks:\n  - name: flip\n    params: []\n    taskRef:\n      name: flip\n  - conditions:\n    - conditionRef: condition-1\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: flip-again\n    params: []\n    taskRef:\n      name: flip-again\n  - conditions:\n    - conditionRef: condition-2\n      params:\n      - name: flip-again\n        value: $(tasks.flip-again.results.output)\n    - conditionRef: condition-1\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: print1\n    params:\n    - name: flip-again-output\n      value: $(tasks.flip-again.results.output)\n    taskRef:\n      name: print1\n  - conditions:\n    - conditionRef: condition-3\n      params:\n      - name: flip\n        value: $(tasks.flip.results.output)\n    name: print2\n    params:\n    - name: flip-again-output\n      value: $(tasks.flip-again.results.output)\n    taskRef:\n      name: print2'
+      templateString = workflow;
+      const graph = WorkflowParser.createRuntimeGraph(templateString)
 
       const breadcrumbs: Array<{ displayName: string; href: string }> = [];
       // If this is an archived run, only show Archive in breadcrumbs, otherwise show
@@ -671,20 +698,44 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
 
       const pageTitle = (
         <div className={commonCss.flex}>
-          {statusToIcon(runStatus as NodePhase, completionTime)}
-          <span style={{ marginLeft: 10 }}>{runName}</span>
+          {statusToIcon(runMetadata.status as NodePhase, runDetail.run!.created_at)}
+          <span style={{ marginLeft: 10 }}>{runMetadata.name!}</span>
         </div>
-      );
+      );      
+      
+      // Update the Archive/Restore button based on the storage state of this run
+      const buttons = new Buttons(
+        this.props,
+        this.refresh.bind(this),
+        this.getInitialToolbarState().actions,
+      );      
+      const idGetter = () => (runMetadata ? [runMetadata!.id!] : []);
+      runMetadata!.storage_state === RunStorageState.ARCHIVED
+        ? buttons.restore(idGetter, true, () => this.refresh())
+        : buttons.archive(idGetter, true, () => this.refresh());
+      const actions = buttons.getToolbarActionMap();
+      actions[ButtonKeys.TERMINATE_RUN].disabled =
+        (runMetadata.status as NodePhase) === NodePhase.TERMINATING || runFinished;
+      actions[ButtonKeys.RETRY].disabled =
+        (runMetadata.status as NodePhase) !== NodePhase.FAILED &&
+        (runMetadata.status as NodePhase) !== NodePhase.ERROR;
+      this.props.updateToolbar({
+        actions,
+        breadcrumbs,
+        pageTitle,
+        pageTitleTooltip: runMetadata.name,
+      });
 
       //const runFinished = true;
       //this._stopAutoRefresh();
       this.setStateSafe({
-        apiResponse,
-        templates,
-        graph
-      });
-      this.props.updateToolbar({
-        pageTitle
+        experiment,
+        graph,
+        runFinished,
+        runMetadata,
+        workflow,
+        mlmdRunContext,
+        mlmdExecutions,
       });
     } catch (err) {
       await this.showPageError(`Error: failed to retrieve run: ${runId}.`, err);
@@ -748,59 +799,20 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
     this.setStateSafe({ allArtifactConfigs });
   }
 
-  private _getDetailsFields(): Array<KeyValue<string>> {
-    const response = this.state.apiResponse['status'];
-    return !response
+  private _getDetailsFields(workflow: any, runMetadata?: ApiRun): Array<KeyValue<string>> {
+    return !workflow.status
       ? []
       : [
-          ['Status', response['runPhase']],
-          ['Finished at', formatDateString(response['completionTime'])]
+          ['Status', workflow.status.conditions[0].type],
+          ['Description', runMetadata ? runMetadata!.description! : ''],
+          [
+            'Created at',
+            workflow.metadata ? formatDateString(workflow.metadata.creationTimestamp) : '-',
+          ],
+          ['Started at', formatDateString(workflow.status.startTime)],
+          ['Finished at', formatDateString(workflow.status.completionTime)],
+          ['Duration', getRunDurationFromWorkflow(workflow)],
         ];
-  }
-
-  private _getTaskParams(): Array<KeyValue<string>> {
-    const id = this.state.selectedNodeDetails?.id;
-    const template = this.state.templates.get(id!)['template'];
-    const status = this.state.apiResponse['status'];
-    const response = this.state.apiResponse['status'];
-
-    const params : any[] = [];
-
-    if (template['spec']['params']) {
-      template['spec']['params'].forEach((param: any) => {
-        params.push([param['name'], 'output'])
-      })
-    }
-
-    return params
-  }
-
-  private _getTaskResults(): Array<KeyValue<string>> {
-    const id = this.state.selectedNodeDetails?.id;
-    const template = this.state.templates.get(id!)['template'];
-    const status = this.state.apiResponse['status'];
-    const response = this.state.apiResponse['status'];
-
-    const params : any[] = [];
-
-    if (template['spec']['results']) {
-      template['spec']['results'].forEach((param: any) => {
-        let foundNode = false;
-        status['workflowNodes'].forEach((node: any) => {
-          if (node['id'] == id && node['message']) {
-            const results = node['message']
-            const valueStart = results.substring(results.indexOf('value') + 8)
-            params.push([param['name'], valueStart.substring(0, valueStart.indexOf('"'))])
-            foundNode = true;
-          }
-        })
-        if (!foundNode) {
-          params.push([param['name'], ''])
-        }
-      })
-    }
-
-    return params
   }
 
   private async _selectNode(id: string): Promise<void> {
