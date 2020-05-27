@@ -72,7 +72,7 @@ import {
   logger,
   serviceErrorToString,
 } from '../lib/Utils';
-import WorkflowParser, { Status } from '../lib/WorkflowParser';
+import WorkflowParser from '../lib/WorkflowParser';
 import { ExecutionDetailsContent } from './ExecutionDetails';
 import { Page, PageProps } from './Page';
 import { statusToIcon } from './Status';
@@ -128,7 +128,7 @@ interface RunDetailsState {
   selectedNodeDetails: SelectedNodeDetails | null;
   sidepanelBusy: boolean;
   sidepanelSelectedTab: SidePaneTab;
-  workflow?: Workflow;
+  workflow?: any;
   mlmdRunContext?: Context;
   mlmdExecutions?: Execution[];
 }
@@ -322,7 +322,7 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
                                   this.setStateSafe({
                                     sidepanelSelectedTab: panelTab
                                   })
-                                  this._loadSidePaneTab.bind(this)
+                                  this._loadSidePaneTab(panelTab)
                                 }}
                               />
 
@@ -330,27 +330,6 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
                                 data-testid='run-details-node-details'
                                 className={commonCss.page}
                               >
-                                {sidepanelSelectedTab === SidePaneTab.ARTIFACTS &&
-                                  this.state.selectedNodeDetails &&
-                                  this.state.workflow && (
-                                    <ArtifactsTabContent
-                                      nodeId={this.state.selectedNodeDetails.id}
-                                      nodeStatus={
-                                        this.state.workflow && this.state.workflow.status
-                                          ? this.state.workflow.status[
-                                              this.state.selectedNodeDetails.id
-                                            ]
-                                          : undefined
-                                      }
-                                      namespace={this.state.workflow?.metadata?.namespace}
-                                      visualizationCreatorConfig={visualizationCreatorConfig}
-                                      generatedVisualizations={this.state.generatedVisualizations.filter(
-                                        visualization =>
-                                          visualization.nodeId === selectedNodeDetails.id,
-                                      )}
-                                      onError={this.handleError}
-                                    />
-                                  )}
 
                                 {sidepanelSelectedTab === SidePaneTab.INPUT_OUTPUT && (
                                   <div className={padding(20)}>
@@ -626,7 +605,7 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
 
     try {
       const runDetail = await Apis.runServiceApi.getRun(runId);
-      console.log("This RUn Detail");
+      console.log("Run Detail");
       console.log(runDetail);
 
       const relatedExperimentId = RunUtils.getFirstExperimentReferenceId(runDetail.run);
@@ -803,7 +782,7 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
     return !workflow.status
       ? []
       : [
-          ['Status', workflow.status.conditions[0].type],
+          ['Status', workflow.status.conditions[0].reason],
           ['Description', runMetadata ? runMetadata!.description! : ''],
           [
             'Created at',
@@ -825,12 +804,19 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
   private async _loadSidePaneTab(tab: SidePaneTab): Promise<void> {
     const workflow = this.state.workflow;
     const selectedNodeDetails = this.state.selectedNodeDetails;
-    if (workflow && workflow.status && workflow.status.nodes && selectedNodeDetails) {
-      const node = workflow.status.nodes[selectedNodeDetails.id];
-      if (node) {
+    if (workflow && workflow.status && workflow.status && selectedNodeDetails) {
+
+      let node : any;
+
+      for (const podName of Object.getOwnPropertyNames(workflow.status.taskRuns)) {
+        if (workflow.status.taskRuns[podName].status.podName === selectedNodeDetails.id) {
+          node = workflow.status.taskRuns[podName].status;
+        }
+      }
+      if (node && node.conditions[0].type !== 'Succeeded') {
         selectedNodeDetails.phaseMessage =
-          node && node.message
-            ? `This step is in ${node.phase} state with this message: ` + node.message
+          node && node.status
+            ? `This step is in ${node.status.conditions[0].type} state with this message: ` + node.status.conditions[0].message
             : undefined;
       }
       this.setStateSafe({ selectedNodeDetails, sidepanelSelectedTab: tab });

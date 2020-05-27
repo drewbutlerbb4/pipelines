@@ -97,7 +97,6 @@ export class Apis {
    * Get pod logs
    */
   public static getPodLogs(podName: string, podNamespace?: string): Promise<string> {
-    console.log("GET POD LGOS In the way")
     let query = `k8s/pod/logs?podname=${encodeURIComponent(podName)}`;
     if (podNamespace) {
       query += `&podnamespace=${encodeURIComponent(podNamespace)}`;
