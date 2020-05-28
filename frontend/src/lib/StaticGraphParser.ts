@@ -67,6 +67,7 @@ export function _populateInfoFromTask(
     info.args = steps[0]['args'] || [];
     info.command = steps[0]['command'] || [];
     info.image = steps[0]['image'] || [];
+    info.volumeMounts = (steps[0]['volumeMounts'] || []).map((volume: any) => [volume.mountPath, volume.name])
   }
 
   if (task['taskSpec'] && task['taskSpec']['params'])
@@ -117,7 +118,7 @@ function buildTektonDag(
 
           const condInfo = new SelectedNodeInfo();
           _populateInfoFromTask(condInfo, task)
-      
+
           // Add a node for the Condition itself
           graph.setNode(condition['conditionRef'], {
             bgColor: task.when ? 'cornsilk' : undefined,

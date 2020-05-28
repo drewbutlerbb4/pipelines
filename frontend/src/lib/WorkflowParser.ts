@@ -263,25 +263,24 @@ export default class WorkflowParser {
 
   // Makes sure the workflow object contains the node and returns its
   // volume mounts if any.
-  public static getNodeVolumeMounts(workflow: Workflow, nodeId: string): Array<KeyValue<string>> {
+  public static getNodeVolumeMounts(workflow: any, nodeId: string): Array<KeyValue<string>> {
     if (
       !workflow ||
       !workflow.status ||
-      !workflow.status.nodes ||
-      !workflow.status.nodes[nodeId] ||
-      !workflow.spec ||
-      !workflow.spec.templates
+      !workflow.status.taskRuns
     ) {
       return [];
     }
 
-    const node = workflow.status.nodes[nodeId];
-    const tmpl = workflow.spec.templates.find(t => !!t && !!t.name && t.name === node.templateName);
-    let volumeMounts: Array<KeyValue<string>> = [];
-    if (tmpl && tmpl.container && tmpl.container.volumeMounts) {
-      volumeMounts = tmpl.container.volumeMounts.map(v => [v.mountPath, v.name]);
+    // If the matching taskRun for nodeId can be found then return the volumes found in the main step
+    for (const task of Object.getOwnPropertyNames(workflow.status.taskRuns)) {
+      const steps = workflow.status.taskRuns[task].status.taskSpec.steps;
+      if (workflow.status.taskRuns[task].status.podName === nodeId)
+        for (const step of (steps || []))
+          if (step.name === 'main')
+            return step.volumeMounts.map((volume : any) => [volume.mountPath, volume.name])
     }
-    return volumeMounts;
+    return []
   }
 
   // Makes sure the workflow object contains the node and returns its
