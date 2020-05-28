@@ -107,12 +107,12 @@ export function getRunDuration(run?: any): string {
   return getDuration(new Date(run.status.startTime), new Date(run.status.completionTime));
 }
 
-export function getRunDurationFromWorkflow(workflow?: Workflow): string {
-  if (!workflow || !workflow.status || !workflow.status.startedAt || !workflow.status.finishedAt) {
+export function getRunDurationFromWorkflow(workflow?: any): string {
+  if (!workflow || !workflow.status || !workflow.status.startTime || !workflow.status.completionTime) {
     return '-';
   }
 
-  return getDuration(new Date(workflow.status.startedAt), new Date(workflow.status.finishedAt));
+  return getDuration(new Date(workflow.status.startTime), new Date(workflow.status.completionTime));
 }
 
 export function s(items: any[] | number): string {

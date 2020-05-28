@@ -680,14 +680,14 @@ class RunDetails extends Page<RunDetailsInternalProps, RunDetailsState> {
           {statusToIcon(runMetadata.status as NodePhase, runDetail.run!.created_at)}
           <span style={{ marginLeft: 10 }}>{runMetadata.name!}</span>
         </div>
-      );      
-      
+      );
+
       // Update the Archive/Restore button based on the storage state of this run
       const buttons = new Buttons(
         this.props,
         this.refresh.bind(this),
         this.getInitialToolbarState().actions,
-      );      
+      );
       const idGetter = () => (runMetadata ? [runMetadata!.id!] : []);
       runMetadata!.storage_state === RunStorageState.ARCHIVED
         ? buttons.restore(idGetter, true, () => this.refresh())
