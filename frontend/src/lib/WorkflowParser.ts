@@ -274,11 +274,12 @@ export default class WorkflowParser {
 
     // If the matching taskRun for nodeId can be found then return the volumes found in the main step
     for (const task of Object.getOwnPropertyNames(workflow.status.taskRuns)) {
-      const steps = workflow.status.taskRuns[task].status.taskSpec.steps;
-      if (workflow.status.taskRuns[task].status.podName === nodeId)
+      if (workflow.status.taskRuns[task].status.podName === nodeId) {
+        const steps = workflow.status.taskRuns[task].status.taskSpec.steps;
         for (const step of (steps || []))
           if (step.name === 'main')
-            return step.volumeMounts.map((volume : any) => [volume.mountPath, volume.name])
+            return (step.volumeMounts || []).map((volume : any) => [volume.mountPath, volume.name])
+      }
     }
     return []
   }
