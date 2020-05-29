@@ -40,12 +40,13 @@ func TestCreateRun(t *testing.T) {
 	expectedRuntimeWorkflow.Spec.ServiceAccountName = "pipeline-runner"
 	expectedRunDetail := api.RunDetail{
 		Run: &api.Run{
-			Id:           "123e4567-e89b-12d3-a456-426655440000",
-			Name:         "run1",
-			StorageState: api.Run_STORAGESTATE_AVAILABLE,
-			CreatedAt:    &timestamp.Timestamp{Seconds: 2},
-			ScheduledAt:  &timestamp.Timestamp{},
-			FinishedAt:   &timestamp.Timestamp{},
+			Id:             "123e4567-e89b-12d3-a456-426655440000",
+			Name:           "run1",
+			ServiceAccount: "pipeline-runner",
+			StorageState:   api.Run_STORAGESTATE_AVAILABLE,
+			CreatedAt:      &timestamp.Timestamp{Seconds: 2},
+			ScheduledAt:    &timestamp.Timestamp{},
+			FinishedAt:     &timestamp.Timestamp{},
 			PipelineSpec: &api.PipelineSpec{
 				WorkflowManifest: testWorkflow.ToStringForStore(),
 				Parameters:       []*api.Parameter{{Name: "param1", Value: "world"}},
@@ -91,12 +92,13 @@ func TestCreateRunPatch(t *testing.T) {
 	expectedRuntimeWorkflow.Spec.ServiceAccountName = "pipeline-runner"
 	expectedRunDetail := api.RunDetail{
 		Run: &api.Run{
-			Id:           "123e4567-e89b-12d3-a456-426655440000",
-			Name:         "run1",
-			StorageState: api.Run_STORAGESTATE_AVAILABLE,
-			CreatedAt:    &timestamp.Timestamp{Seconds: 2},
-			ScheduledAt:  &timestamp.Timestamp{},
-			FinishedAt:   &timestamp.Timestamp{},
+			Id:             "123e4567-e89b-12d3-a456-426655440000",
+			Name:           "run1",
+			ServiceAccount: "pipeline-runner",
+			StorageState:   api.Run_STORAGESTATE_AVAILABLE,
+			CreatedAt:      &timestamp.Timestamp{Seconds: 2},
+			ScheduledAt:    &timestamp.Timestamp{},
+			FinishedAt:     &timestamp.Timestamp{},
 			PipelineSpec: &api.PipelineSpec{
 				WorkflowManifest: testWorkflowPatch.ToStringForStore(),
 				Parameters: []*api.Parameter{
@@ -121,7 +123,7 @@ func TestCreateRun_Unauthorized(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment_KFAM_Unauthorized(t)
@@ -146,7 +148,7 @@ func TestCreateRun_Multiuser(t *testing.T) {
 	defer viper.Set(common.MultiUserMode, "false")
 	defer viper.Set(common.DefaultPipelineRunnerServiceAccount, "pipeline-runner")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, experiment := initWithExperiment(t)
@@ -171,12 +173,13 @@ func TestCreateRun_Multiuser(t *testing.T) {
 	expectedRuntimeWorkflow.Spec.ServiceAccountName = "default-editor" // In multi-user mode, we use default service account.
 	expectedRunDetail := api.RunDetail{
 		Run: &api.Run{
-			Id:           "123e4567-e89b-12d3-a456-426655440000",
-			Name:         "run1",
-			StorageState: api.Run_STORAGESTATE_AVAILABLE,
-			CreatedAt:    &timestamp.Timestamp{Seconds: 2},
-			ScheduledAt:  &timestamp.Timestamp{},
-			FinishedAt:   &timestamp.Timestamp{},
+			Id:             "123e4567-e89b-12d3-a456-426655440000",
+			Name:           "run1",
+			ServiceAccount: "default-editor",
+			StorageState:   api.Run_STORAGESTATE_AVAILABLE,
+			CreatedAt:      &timestamp.Timestamp{Seconds: 2},
+			ScheduledAt:    &timestamp.Timestamp{},
+			FinishedAt:     &timestamp.Timestamp{},
 			PipelineSpec: &api.PipelineSpec{
 				WorkflowManifest: testWorkflow.ToStringForStore(),
 				Parameters:       []*api.Parameter{{Name: "param1", Value: "world"}},
@@ -211,12 +214,13 @@ func TestListRun(t *testing.T) {
 	assert.Nil(t, err)
 
 	expectedRun := &api.Run{
-		Id:           "123e4567-e89b-12d3-a456-426655440000",
-		Name:         "run1",
-		StorageState: api.Run_STORAGESTATE_AVAILABLE,
-		CreatedAt:    &timestamp.Timestamp{Seconds: 2},
-		ScheduledAt:  &timestamp.Timestamp{},
-		FinishedAt:   &timestamp.Timestamp{},
+		Id:             "123e4567-e89b-12d3-a456-426655440000",
+		Name:           "run1",
+		ServiceAccount: "pipeline-runner",
+		StorageState:   api.Run_STORAGESTATE_AVAILABLE,
+		CreatedAt:      &timestamp.Timestamp{Seconds: 2},
+		ScheduledAt:    &timestamp.Timestamp{},
+		FinishedAt:     &timestamp.Timestamp{},
 		PipelineSpec: &api.PipelineSpec{
 			WorkflowManifest: testWorkflow.ToStringForStore(),
 			Parameters:       []*api.Parameter{{Name: "param1", Value: "world"}},
@@ -237,7 +241,7 @@ func TestListRuns_Unauthorized(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment_KFAM_Unauthorized(t)
@@ -257,7 +261,7 @@ func TestListRuns_Multiuser(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, experiment := initWithExperiment(t)
@@ -275,12 +279,13 @@ func TestListRuns_Multiuser(t *testing.T) {
 	assert.Nil(t, err)
 
 	expectedRuns := []*api.Run{{
-		Id:           "123e4567-e89b-12d3-a456-426655440000",
-		Name:         "run1",
-		StorageState: api.Run_STORAGESTATE_AVAILABLE,
-		CreatedAt:    &timestamp.Timestamp{Seconds: 2},
-		ScheduledAt:  &timestamp.Timestamp{},
-		FinishedAt:   &timestamp.Timestamp{},
+		Id:             "123e4567-e89b-12d3-a456-426655440000",
+		Name:           "run1",
+		ServiceAccount: "pipeline-runner",
+		StorageState:   api.Run_STORAGESTATE_AVAILABLE,
+		CreatedAt:      &timestamp.Timestamp{Seconds: 2},
+		ScheduledAt:    &timestamp.Timestamp{},
+		FinishedAt:     &timestamp.Timestamp{},
 		PipelineSpec: &api.PipelineSpec{
 			WorkflowManifest: testWorkflow.ToStringForStore(),
 			Parameters:       []*api.Parameter{{Name: "param1", Value: "world"}},
@@ -593,7 +598,7 @@ func TestCanAccessRun_Unauthorized(t *testing.T) {
 	defer clients.Close()
 	runServer := RunServer{resourceManager: manager}
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	apiRun := &api.Run{
@@ -630,7 +635,7 @@ func TestCanAccessRun_Authorized(t *testing.T) {
 	defer clients.Close()
 	runServer := RunServer{resourceManager: manager}
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	apiRun := &api.Run{

@@ -12,7 +12,7 @@ metadata:
 spec:
   descriptor:
     type: Kubeflow Pipelines
-    version: '0.5.0'
+    version: '0.5.1'
     description: |-
       Reusable end-to-end ML workflow
     maintainers:
@@ -46,6 +46,6 @@ spec:
       kind: ConfigMap
     - group: v1
       kind: Secret
-    - group: apps/v1beta2
+    - group: apps/v1
       kind: Deployment
 

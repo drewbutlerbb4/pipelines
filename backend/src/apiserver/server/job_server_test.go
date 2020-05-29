@@ -43,6 +43,7 @@ var (
 	commonExpectedJob = &api.Job{
 		Id:             "123e4567-e89b-12d3-a456-426655440000",
 		Name:           "job1",
+		ServiceAccount: "pipeline-runner",
 		Enabled:        true,
 		MaxConcurrency: 1,
 		Trigger: &api.Trigger{
@@ -252,7 +253,7 @@ func TestCreateJob_Unauthorized(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment_KFAM_Unauthorized(t)
@@ -267,7 +268,7 @@ func TestGetJob_Unauthorized(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment(t)
@@ -289,7 +290,7 @@ func TestGetJob_Multiuser(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment(t)
@@ -307,7 +308,7 @@ func TestListJobs_Unauthorized(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, experiment := initWithExperiment_KFAM_Unauthorized(t)
@@ -336,7 +337,7 @@ func TestListJobs_Multiuser(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment(t)
@@ -436,7 +437,7 @@ func TestEnableJob_Unauthorized(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment(t)
@@ -458,7 +459,7 @@ func TestEnableJob_Multiuser(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment(t)
@@ -476,7 +477,7 @@ func TestDisableJob_Unauthorized(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment(t)
@@ -498,7 +499,7 @@ func TestDisableJob_Multiuser(t *testing.T) {
 	viper.Set(common.MultiUserMode, "true")
 	defer viper.Set(common.MultiUserMode, "false")
 
-	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: "accounts.google.com:user@google.com"})
+	md := metadata.New(map[string]string{common.GoogleIAPUserIdentityHeader: common.GoogleIAPUserIdentityPrefix + "user@google.com"})
 	ctx := metadata.NewIncomingContext(context.Background(), md)
 
 	clients, manager, _ := initWithExperiment(t)
